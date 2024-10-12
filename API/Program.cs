@@ -1,9 +1,20 @@
+using Microsoft.EntityFrameworkCore;
+using Persistence;
+
 var builder = WebApplication.CreateBuilder(args);
+
+
+DotNetEnv.Env.Load();
+var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddControllers(); // Add this if you are using controllers.
 builder.Services.AddSwaggerGen();
+builder.Services.AddDbContext<DataContext>(opt => {
+    opt.UseSqlite(connectionString);
+});
 
 var app = builder.Build();
 
@@ -15,6 +26,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRouting();  // Optional, as this is implicit when using top-level routing.
+app.UseAuthorization();
+// Instead of app.UseEndpoints, directly map controllers and routes here.
+app.MapControllers(); // This replaces `endpoints.MapControllers()`.
+
 
 var summaries = new[]
 {
@@ -35,6 +51,20 @@ app.MapGet("/weatherforecast", () =>
 })
 .WithName("GetWeatherForecast")
 .WithOpenApi();
+
+using var scope = app.Services.CreateScope();
+var services = scope.ServiceProvider;
+
+try
+{
+    var context = services.GetRequiredService<DataContext>();
+    await context.Database.MigrateAsync();
+}
+catch (Exception ex)
+{
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(ex, "An error occured during migration");
+}
 
 app.Run();
 
